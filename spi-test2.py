@@ -61,9 +61,12 @@ def main():
     spi.mode = 0b00
     print(f"Mode: {spi.mode}, Speed: {format_frequency(spi.max_speed_hz)}, Iterations: {format(iterations, ',')}")
 
+    value_to_send = 0x00
+
     print("Infinite send loop")
     while True:
-        spi.writebytes([0x01])
+        spi.writebytes([value_to_send])
+        value_to_send += 1 # Increment value to send
         #print(str(spi.readbytes(1)))
         time.sleep(0.1)
     
