@@ -65,10 +65,18 @@ def main():
 
     print("Infinite send loop")
     while True:
-        spi.writebytes([value_to_send])
-        value_to_send += 1 # Increment value to send
-        #print(str(spi.readbytes(1)))
-        time.sleep(0.1)
+        #spi.writebytes([value_to_send])
+        #value_to_send += 1 # Increment value to send
+
+        #Read bytes from SPI device
+        byte_to_read = spi.readbytes(1)
+
+        #Print the read byte
+        print("Read byte: ", byte_to_read)
+
+        #Wait for Enter to continue
+        input("Press Enter to continue...")
+        
     
     
     #start_time = time.time()
