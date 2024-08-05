@@ -96,7 +96,7 @@ def quit(spi):
 #<Byte 0: 0x01> <Byte 1 - Byte 5: Sector Number> <CRC-32>
 def write_sector(spi, sector_number):
     #Command byte
-    command = 0x01
+    command = 0x02
     #Sector number byte array
     sector_bytes = sector_number.to_bytes(4, byteorder='little')
 
@@ -122,7 +122,7 @@ def write_sector(spi, sector_number):
 #<Byte 0x02: Command> <Byte 1 - Byte 5: Sector Number> <CRC-32>
 def read_sector(spi, sector_number):
     #Command byte
-    command = 0x02
+    command = 0x01
     #Sector number byte array
     sector_bytes = sector_number.to_bytes(4, byteorder='little')
 
