@@ -93,7 +93,7 @@ def quit(spi):
 
 #Send a write sector command to SPI interface
 #Command format:
-#<Byte 0: 0x01> <Byte 1 - Byte 5: Sector Number> <CRC-32>
+#<Byte 0: 0x02> <Byte 1 - Byte 5: Sector Number> <CRC-32>
 def write_sector(spi, sector_number):
     #Command byte
     command = 0x02
@@ -119,7 +119,7 @@ def write_sector(spi, sector_number):
 
 #Send a read sector command to SPI interface
 #Command format:
-#<Byte 0x02: Command> <Byte 1 - Byte 5: Sector Number> <CRC-32>
+#<Byte 0x01: Command> <Byte 1 - Byte 5: Sector Number> <CRC-32>
 def read_sector(spi, sector_number):
     #Command byte
     command = 0x01
@@ -158,9 +158,9 @@ def main():
     print("Infinite send loop")
     while True:
         #Send a test command
-        quit(spi)
+        #quit(spi)
         #write_sector(spi, sector_no)
-        #read_sector(spi, sector_no)
+        read_sector(spi, sector_no)
 
         #Increment sector number
         sector_no += 1
