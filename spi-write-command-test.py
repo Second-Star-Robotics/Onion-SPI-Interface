@@ -8,16 +8,6 @@ def printHex(numbers):
     for i in range(0, len(numbers), 10):
         print(', '.join(hex(num) for num in numbers[i:i+10]))
 
-def print_sector(sector):
-    print("Offset: 00 01 02 03 04 05 06 07  08 09 0A 0B 0C 0D 0E 0F")
-    print("-------------------------------------------------------")
-
-    for i in range(0, len(sector), 16):
-        offset = f"{i:06X}"
-        row = " ".join(f"{byte:02X}" for byte in sector[i:i+8])
-        row += "  " + " ".join(f"{byte:02X}" for byte in sector[i+8:i+16])
-        print(f"{offset}: {row}")
-
 # Do a half-duplex transmission where input_array bytes are written and bytes_to_read bytes are read
 def spiSend(spi, input_array, bytes_to_read):
     spi.writebytes(input_array)
@@ -103,7 +93,7 @@ def quit(spi):
 
 #Send a write sector command to SPI interface
 #Command format:
-#<Byte 0: Command 0x02> <Byte 1 - Byte 5: Sector Number> <CRC-32>
+#<Byte 0: 0x02> <Byte 1 - Byte 5: Sector Number> <CRC-32>
 def write_sector(spi, sector_number):
     #Command byte
     command = 0x02
@@ -129,7 +119,7 @@ def write_sector(spi, sector_number):
 
 #Send a read sector command to SPI interface
 #Command format:
-#<Byte 0: Command 0x01> <Byte 1 - Byte 5: Sector Number> <CRC-32>
+#<Byte 0x01: Command> <Byte 1 - Byte 5: Sector Number> <CRC-32>
 def read_sector(spi, sector_number):
     #Command byte
     command = 0x01
@@ -137,14 +127,14 @@ def read_sector(spi, sector_number):
     sector_bytes = sector_number.to_bytes(4, byteorder='little')
 
     #Assemble message byte array
-    command_message = [command] + list(sector_bytes)
+    message = [command] + list(sector_bytes)
 
     #Calculate CRC-32
-    crc = crc32(command_message)
+    crc = crc32(message)
     crc_bytes = crc.to_bytes(4, byteorder='little')
 
     #Assemble command frame
-    command_frame = command_message + list(crc_bytes)
+    command_frame = message + list(crc_bytes)
 
     #Display hex values for command frame command_frame = <Byte 0: Command> <Byte 1 - Byte 5: Sector Number> <CRC-32>
     print("Command frame: ")
@@ -152,45 +142,6 @@ def read_sector(spi, sector_number):
 
     #Send command frame
     spi.writebytes(command_frame)
-    #Wait for Data Ready Flag
-    time.sleep(1) #Wait for 1 second for testing
-    data_ready = False
-    while not data_ready:
-        data_ready = True #Set true for testing
-
-    #SPI read 517 bytes in 8 byte increments and append to data_frame
-    #read 1 byte and throw it away
-    spi.readbytes(1)
-
-    data_frame = bytearray()
-    for i in range(0, 64):
-        data_frame += bytearray(spi.readbytes(8))
-    
-    data_frame+= bytearray(spi.readbytes(4))
-
-    #Extract sector data from data frame (first 512 bytes)
-    sector_data = data_frame[:512]
-
-    #Print sector data
-    print_sector(sector_data)
-
-    #Calculate local CRC for sector data
-    local_crc = crc32(sector_data)
-    #Print Local CRC as hex
-    print("Local CRC: ")
-    printHex(local_crc.to_bytes(4, byteorder='big'))
-    
-    #Calculate remote CRC from data frame
-    remote_crc_bytes = data_frame[-4:]
-
-    #extract last for bytes for remote CRC
-    remote_crc_bytes = data_frame[-4:]
-    #Print Remote CRC bytes as hex
-    print("Remote CRC: ")
-    printHex(remote_crc_bytes)
-
-    return sector_data 
-
 
 def main():
     # Hardcoded arguments
