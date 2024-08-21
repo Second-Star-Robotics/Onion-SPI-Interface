@@ -176,6 +176,9 @@ def read_sector(spi, sector_number):
 
     #Calculate local CRC for sector data
     local_crc = crc32(sector_data)
+    #Print local CRC as decimal
+    print(f"Local CRC: {local_crc}")
+
     #Print Local CRC as hex
     print("Local CRC: ")
     printHex(local_crc.to_bytes(4, byteorder='big'))
@@ -189,7 +192,23 @@ def read_sector(spi, sector_number):
     print("Remote CRC: ")
     printHex(remote_crc_bytes)
 
-    return sector_data 
+    #Convert remote CRC bytes to integer
+    remote_crc = int.from_bytes(remote_crc_bytes, byteorder='big')
+
+    #Print remote CRC as decimal
+    print(f"Remote CRC: {remote_crc}")
+
+    #Test if local CRC matches remote CRC
+    if local_crc == remote_crc:
+        CRC_good = True
+        print("CRC Match")
+    else:
+        CRC_good = False
+        print("CRC Mismatch")
+
+    #Return sector data and CRC match status
+
+    return sector_data, CRC_good
 
 
 def main():
@@ -209,10 +228,14 @@ def main():
         #Send a test command
         #quit(spi)
         #write_sector(spi, sector_no)
-        read_sector(spi, sector_no)
+        #Read sector data
+        sector_data, CRC_good = read_sector(spi, sector_no)
 
-        #Increment sector number
-        sector_no += 1
+        #If sector data was good increment sector number
+        if CRC_good:
+            sector_no += 1
+        else:
+            print("CRC Mismatch - Retrying")
 
         #Wait for Enter to continue
         input("Press Enter to continue...")
