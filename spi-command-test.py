@@ -146,10 +146,6 @@ def read_sector(spi, sector_number):
     #Assemble command frame
     command_frame = command_message + list(crc_bytes)
 
-    #Display hex values for command frame command_frame = <Byte 0: Command> <Byte 1 - Byte 5: Sector Number> <CRC-32>
-    print("Command frame: ")
-    printHex(command_frame)    
-
     #Send command frame
     spi.writebytes(command_frame)
     #Wait for Data Ready Flag
@@ -172,16 +168,16 @@ def read_sector(spi, sector_number):
     sector_data = data_frame[:512]
 
     #Print sector data
-    print_sector(sector_data)
+    #print_sector(sector_data)
 
     #Calculate local CRC for sector data
     local_crc = crc32(sector_data)
     #Print local CRC as decimal
-    print(f"Local CRC: {local_crc}")
+    # print(f"Local CRC: {local_crc}")
 
     #Print Local CRC as hex
-    print("Local CRC: ")
-    printHex(local_crc.to_bytes(4, byteorder='big'))
+    # print("Local CRC: ")
+    # printHex(local_crc.to_bytes(4, byteorder='big'))
     
     #Calculate remote CRC from data frame
     remote_crc_bytes = data_frame[-4:]
@@ -189,22 +185,17 @@ def read_sector(spi, sector_number):
     #extract last for bytes for remote CRC
     remote_crc_bytes = data_frame[-4:]
     #Print Remote CRC bytes as hex
-    print("Remote CRC: ")
-    printHex(remote_crc_bytes)
+    # print("Remote CRC: ")
+    # printHex(remote_crc_bytes)
 
     #Convert remote CRC bytes to integer
     remote_crc = int.from_bytes(remote_crc_bytes, byteorder='big')
 
-    #Print remote CRC as decimal
-    print(f"Remote CRC: {remote_crc}")
-
     #Test if local CRC matches remote CRC
     if local_crc == remote_crc:
         CRC_good = True
-        print("CRC Match")
     else:
         CRC_good = False
-        print("CRC Mismatch")
 
     #Return sector data and CRC match status
 
@@ -231,6 +222,15 @@ def main():
         #Read sector data
         sector_data, CRC_good = read_sector(spi, sector_no)
 
+        #Print sector data
+        print_sector(sector_data)
+
+        #Print CRC match status
+        if CRC_good:
+            print("CRC Match")
+        else:
+            print("CRC Mismatch")
+    
         #If sector data was good increment sector number
         if CRC_good:
             sector_no += 1
