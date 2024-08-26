@@ -149,7 +149,7 @@ def read_sector(spi, sector_number):
     #Send command frame
     spi.writebytes(command_frame)
     #Wait for Data Ready Flag
-    time.sleep(1) #Wait for 1 second for testing
+    time.sleep(0.1) #Wait for 1 second for testing
     data_ready = False
     while not data_ready:
         data_ready = True #Set true for testing
@@ -201,6 +201,64 @@ def read_sector(spi, sector_number):
 
     return sector_data, CRC_good
 
+def sector_to_samples(sector_data, number_of_values=16):
+    """
+    Convert a 512-byte sector into a list of 32-byte samples.
+
+    Each sample is a 32-byte array of uint8 values.
+
+    Inputs:
+    - sector_data (bytearray): A 512-byte array representing the sector data read from the SD card.
+    - number_of_values (int): The number of 2-byte values in each sample. Default is 16.
+
+    Outputs:
+    - samples (list of bytearrays): A list of samples, where each sample is a 32-byte bytearray.
+    """
+
+    if len(sector_data) != 512:
+        raise ValueError("Sector data must be exactly 512 bytes.")
+    
+    samples = []
+    sample_size = number_of_values * 2  # Each sample is 32 bytes
+    
+    for i in range(0, 512, sample_size):
+        sample = sector_data[i:i + sample_size]
+        samples.append(bytearray(sample))
+    
+    return samples
+
+def convert_sample_to_dict(sample, number_of_values=16):
+    """
+    Convert a 32-byte sample array into a dictionary of sensor data.
+
+    Inputs:
+    - sample (bytearray): A 32-byte array representing the raw sample data.
+    - number_of_values (int): Number of 16-bit sensor values in each sample. Default is 16.
+
+    Outputs:
+    - sample_dict (dict): A dictionary with keys as labels and values as the sensor data.
+    """
+    sample_dict = {}
+
+    # Extract 32-bit timestamp (Ticks)
+    sample_dict['Ticks'] = int.from_bytes(sample[0:4], byteorder='little')
+
+    # Extract the remaining 16-bit values
+    sensor_data_labels = [
+        "Reserved_1", "Reserved_2", "SS_FLAG", "Release_On", "Lamps_On", 
+        "Reserved_3", "Reserved_4", "Reserved_5", "Temperature", 
+        "Reserved_6", "Pressure_Value", "Pressure_Status", 
+        "Battery_Value", "Camera_Record_Time"
+    ]
+
+    # The labels array above has 14 entries corresponding to the indices 2 to 15 in the C code
+
+    for i, label in enumerate(sensor_data_labels):
+        sensor_value = int.from_bytes(sample[4 + 2*i: 6 + 2*i], byteorder='little')
+        sample_dict[label] = sensor_value
+
+    return sample_dict
+
 
 def main():
     # Hardcoded arguments
@@ -230,7 +288,21 @@ def main():
             print("CRC Match")
         else:
             print("CRC Mismatch")
-    
+
+        #Convert sector data into sample byte arrays
+        samples = sector_to_samples(sector_data, 16)
+
+        #Print sample arrays listing sector number and sample array number
+        for idx, sample in enumerate(samples):
+            print(f"Sample {idx + 1}: {sample.hex()}")
+
+        #Convert sample arrays into dictionaries
+        sample_dicts = [convert_sample_to_dict(sample, 16) for sample in samples]
+
+        #Print sample dictionaries
+        for idx, sample_dict in enumerate(sample_dicts):
+            print(f"Sample {idx + 1}: {sample_dict}")
+                
         #If sector data was good increment sector number
         if CRC_good:
             sector_no += 1
