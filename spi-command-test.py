@@ -2,6 +2,7 @@ import sys
 import time
 import argparse
 import spidev
+import csv
 
 def printHex(numbers):
     # Print 10 hexadecimal numbers per row, comma-separated
@@ -149,7 +150,7 @@ def read_sector(spi, sector_number):
     #Send command frame
     spi.writebytes(command_frame)
     #Wait for Data Ready Flag
-    time.sleep(0.1) #Wait for 1 second for testing
+    time.sleep(1) #Wait for 1 second for testing
     data_ready = False
     while not data_ready:
         data_ready = True #Set true for testing
@@ -259,6 +260,67 @@ def convert_sample_to_dict(sample, number_of_values=16):
 
     return sample_dict
 
+def download_data_log(spi, number_of_samples, filename, first_data_sector=644, number_of_values=16):
+    """
+    Download samples via SPI and log each sample to a CSV file.
+
+    Inputs:
+    - spi: SPI device object.
+    - number_of_samples (int): Total number of samples to download and process.
+    - filename (str): The output CSV file name.
+    - number_of_values (int): Number of 16-bit values in each sample. Default is 16.
+    """
+    # Calculate the number of sectors needed to cover the requested samples
+    samples_per_sector = 512 // (number_of_values * 2)  # Each sample is 32 bytes
+    total_sectors = (number_of_samples + samples_per_sector - 1) // samples_per_sector
+
+    # Get the CSV headers from the dictionary keys
+    headers = [
+        "Ticks", "Reserved_1", "Reserved_2", "SS_FLAG", "Release_On", "Lamps_On", 
+        "Reserved_3", "Reserved_4", "Reserved_5", "Temperature", 
+        "Reserved_6", "Pressure_Value", "Pressure_Status", 
+        "Battery_Value", "Camera_Record_Time"
+    ]
+
+    # Open the file in append mode
+    with open(filename, mode='a', newline='') as file:
+        writer = csv.DictWriter(file, fieldnames=headers)
+
+        # Write the header only if the file is empty
+        file.seek(0, 2)  # Move the cursor to the end of the file
+        if file.tell() == 0:
+            writer.writeheader()
+
+        sample_count = 0
+
+        for sector_no in range(total_sectors):
+            #Print progress every 10 sectors
+            if sector_no % 10 == 0:
+                print(f"Downloading sector {sector_no} of {total_sectors}")
+
+            # Read the sector data via SPI
+            sector_data, CRC_good = read_sector(spi, sector_no+first_data_sector)
+
+            # Ensure data was correctly read
+            if not CRC_good:
+                print(f"CRC Mismatch on sector {sector_no}. Retrying...")
+                continue  # Optionally, you might want to retry reading the sector
+
+            # Convert sector data into sample byte arrays
+            samples = sector_to_samples(sector_data, number_of_values)
+
+            # Convert sample arrays into dictionaries and write to CSV
+            for sample in samples:
+                if sample_count < number_of_samples:
+                    sample_dict = convert_sample_to_dict(sample, number_of_values)
+                    writer.writerow(sample_dict)
+                    sample_count += 1
+                else:
+                    break  # Stop once the required number of samples is written
+
+            # Stop processing if we've logged the required number of samples
+            if sample_count >= number_of_samples:
+                break
 
 def main():
     # Hardcoded arguments
@@ -270,58 +332,63 @@ def main():
     spi.mode = 0b00
     print(f"Mode: {spi.mode}, Speed: {format_frequency(spi.max_speed_hz)}, Iterations: {format(iterations, ',')}")
 
-    sector_no = 0
+    #Generate a file name based on the current time (.csv)
+    filename = f"data_log_{time.strftime('%Y%m%d_%H%M%S')}.csv"
 
-    print("Infinite send loop")
-    while True:
-        #Send a test command
-        #quit(spi)
-        #write_sector(spi, sector_no)
-        #Read sector data
-        sector_data, CRC_good = read_sector(spi, sector_no)
+    #Download data log
+    download_data_log(spi, 100, filename)
 
-        #Print sector data
-        print_sector(sector_data)
+    print(f"Data log saved to {filename}")
 
-        #Print CRC match status
-        if CRC_good:
-            print("CRC Match")
-        else:
-            print("CRC Mismatch")
+    # sector_no = 0
+    # print("Infinite send loop")
+    # while True:
+    #     #Send a test command
+    #     #quit(spi)
+    #     #write_sector(spi, sector_no)
+    #     #Read sector data
+    #     sector_data, CRC_good = read_sector(spi, sector_no)
 
-        #Convert sector data into sample byte arrays
-        samples = sector_to_samples(sector_data, 16)
+    #     #Print sector data
+    #     print_sector(sector_data)
 
-        #Print sample arrays listing sector number and sample array number
-        for idx, sample in enumerate(samples):
-            print(f"Sample {idx + 1}: {sample.hex()}")
+    #     #Print CRC match status
+    #     if CRC_good:
+    #         print("CRC Match")
+    #     else:
+    #         print("CRC Mismatch")
 
-        #Convert sample arrays into dictionaries
-        sample_dicts = [convert_sample_to_dict(sample, 16) for sample in samples]
+    #     #Convert sector data into sample byte arrays
+    #     samples = sector_to_samples(sector_data, 16)
 
-        #Print sample dictionaries
-        for idx, sample_dict in enumerate(sample_dicts):
-            print(f"Sample {idx + 1}: {sample_dict}")
+    #     #Print sample arrays listing sector number and sample array number
+    #     for idx, sample in enumerate(samples):
+    #         print(f"Sample {idx + 1}: {sample.hex()}")
+
+    #     #Convert sample arrays into dictionaries
+    #     sample_dicts = [convert_sample_to_dict(sample, 16) for sample in samples]
+
+    #     #Print sample dictionaries
+    #     for idx, sample_dict in enumerate(sample_dicts):
+    #         print(f"Sample {idx + 1}: {sample_dict}")
                 
-        #If sector data was good increment sector number
-        if CRC_good:
-            sector_no += 1
-        else:
-            print("CRC Mismatch - Retrying")
+    #     #If sector data was good increment sector number
+    #     if CRC_good:
+    #         sector_no += 1
+    #     else:
+    #         print("CRC Mismatch - Retrying")
 
-        #Wait for Enter to continue
-        input("Press Enter to continue...")
-        
-    
-    
+    #     #Wait for Enter to continue
+    #     input("Press Enter to continue...")
+      
     #start_time = time.time()
     #err = test_spi_send(spi, iterations)
     #elapsed_time = time.time() - start_time
-
-    if err == 0:
-        print(f"All {format(iterations, ',')} bytes sent and received successfully in {format_time(elapsed_time)} - Transfer speed: {format_BPS(iterations, elapsed_time )}")   
-    else:
-        print(f"Errors: {err}")
+    # 
+    # if err == 0:
+    #     print(f"All {format(iterations, ',')} bytes sent and received successfully in {format_time(elapsed_time)} - Transfer speed: {format_BPS(iterations, elapsed_time )}")   
+    # else:
+    #     print(f"Errors: {err}")
 
 if __name__ == "__main__":
     main()
