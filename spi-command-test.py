@@ -3,6 +3,49 @@ import time
 import argparse
 import spidev
 import csv
+import pyOnionGpio
+
+#Configure Data Ready Pin (GPIO5)
+def configureDataReadyPin():
+    """
+    Configure GPIO5 as an input (DATAREADY_FLAG) and return the GPIO object.
+    """
+    pin = 5  # GPIO5
+    print('> Configuring GPIO5 as DATAREADY_FLAG (input)')
+
+    # Instantiate the GPIO object
+    DATAREADY_FLAG = onionGpio.OnionGpio(pin)
+
+    # Set the GPIO direction to input
+    ret = DATAREADY_FLAG.setInputDirection()
+    if ret != 0:
+        print(f'Error setting GPIO5 as input: returned {ret}')
+    else:
+        print('GPIO5 configured as input successfully')
+
+    return DATAREADY_FLAG
+
+def testDataReadyPin(DATAREADY_FLAG):
+    """
+    Monitor GPIO5 for state changes and print the new state when it changes.
+    """
+    print('> Monitoring GPIO5 for state changes...')
+
+    # Read the initial state
+    last_value = DATAREADY_FLAG.getValue()
+    print(f'Initial GPIO5 state: {last_value}')
+
+    while True:
+        # Read the current state
+        current_value = DATAREADY_FLAG.getValue()
+
+        # Check if the state has changed
+        if current_value != last_value:
+            print(f'DATAREADY_FLAG state changed to: {current_value}')
+            last_value = current_value
+
+        # Sleep for a short interval to reduce CPU usage
+        time.sleep(0.1)
 
 def printHex(numbers):
     # Print 10 hexadecimal numbers per row, comma-separated
@@ -274,6 +317,9 @@ def download_data_log(spi, number_of_samples, filename, first_data_sector=644, n
     samples_per_sector = 512 // (number_of_values * 2)  # Each sample is 32 bytes
     total_sectors = (number_of_samples + samples_per_sector - 1) // samples_per_sector
 
+    # Determine progress update intervals
+    progress_interval = max(1, total_sectors // 10)  # At least 1 if total_sectors < 10
+
     # Get the CSV headers from the dictionary keys
     headers = [
         "Ticks", "Reserved_1", "Reserved_2", "SS_FLAG", "Release_On", "Lamps_On", 
@@ -294,12 +340,13 @@ def download_data_log(spi, number_of_samples, filename, first_data_sector=644, n
         sample_count = 0
 
         for sector_no in range(total_sectors):
-            #Print progress every 10 sectors
-            if sector_no % 10 == 0:
-                print(f"Downloading sector {sector_no} of {total_sectors}")
+            # Print progress every progress_interval sectors
+            if sector_no % progress_interval == 0 or sector_no == total_sectors - 1:
+                progress_percentage = (sector_no + 1) / total_sectors * 100
+                print(f"Progress: {progress_percentage:.0f}%")
 
             # Read the sector data via SPI
-            sector_data, CRC_good = read_sector(spi, sector_no+first_data_sector)
+            sector_data, CRC_good = read_sector(spi, sector_no + first_data_sector)
 
             # Ensure data was correctly read
             if not CRC_good:
@@ -322,21 +369,25 @@ def download_data_log(spi, number_of_samples, filename, first_data_sector=644, n
             if sample_count >= number_of_samples:
                 break
 
+    print("Download and logging complete.")
+
 def main():
     # Hardcoded arguments
-    iterations = 10
     frequency = 100000
 
     spi = spidev.SpiDev(0, 1)
     spi.max_speed_hz = frequency
     spi.mode = 0b00
-    print(f"Mode: {spi.mode}, Speed: {format_frequency(spi.max_speed_hz)}, Iterations: {format(iterations, ',')}")
+    
+    #Test Data Ready Pin
+    DATAREADY_FLAG = configureDataReadyPin()
+    testDataReadyPin(DATAREADY_FLAG) #Stuck here!
 
     #Generate a file name based on the current time (.csv)
     filename = f"data_log_{time.strftime('%Y%m%d_%H%M%S')}.csv"
 
     #Download data log
-    download_data_log(spi, 100, filename)
+    download_data_log(spi, 6000, filename)
 
     print(f"Data log saved to {filename}")
 
