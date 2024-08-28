@@ -3,45 +3,37 @@ import time
 import argparse
 import spidev
 import csv
-import pyOnionGpio
+import onionGpio
 
 #Configure Data Ready Pin (GPIO5)
 def configureDataReadyPin():
     """
     Configure GPIO5 as an input (DATAREADY_FLAG) and return the GPIO object.
     """
-    pin = 5  # GPIO5
-    print('> Configuring GPIO5 as DATAREADY_FLAG (input)')
-
     # Instantiate the GPIO object
-    DATAREADY_FLAG = onionGpio.OnionGpio(pin)
+    dataReadyPin = onionGpio.OnionGpio(5)
 
-    # Set the GPIO direction to input
-    ret = DATAREADY_FLAG.setInputDirection()
-    if ret != 0:
-        print(f'Error setting GPIO5 as input: returned {ret}')
-    else:
-        print('GPIO5 configured as input successfully')
+    return dataReadyPin
 
-    return DATAREADY_FLAG
+import time
 
-def testDataReadyPin(DATAREADY_FLAG):
+def testDataReadyPin(dataReadyPin):
     """
-    Monitor GPIO5 for state changes and print the new state when it changes.
+    Monitor the specified GPIO pin for state changes and print the new state when it changes.
     """
-    print('> Monitoring GPIO5 for state changes...')
+    print('> Monitoring GPIO pin for state changes...')
 
     # Read the initial state
-    last_value = DATAREADY_FLAG.getValue()
-    print(f'Initial GPIO5 state: {last_value}')
+    last_value = dataReadyPin.getValue()
+    print(f'Initial GPIO state: {last_value}')
 
     while True:
         # Read the current state
-        current_value = DATAREADY_FLAG.getValue()
+        current_value = dataReadyPin.getValue()
 
         # Check if the state has changed
         if current_value != last_value:
-            print(f'DATAREADY_FLAG state changed to: {current_value}')
+            print(f'dataReadyPin state changed to: {current_value}')
             last_value = current_value
 
         # Sleep for a short interval to reduce CPU usage
@@ -174,7 +166,7 @@ def write_sector(spi, sector_number):
 #Send a read sector command to SPI interface
 #Command format:
 #<Byte 0: Command 0x01> <Byte 1 - Byte 5: Sector Number> <CRC-32>
-def read_sector(spi, sector_number):
+def read_sector(spi, sector_number, dataReadyPin):
     #Command byte
     command = 0x01
     #Sector number byte array
@@ -193,10 +185,14 @@ def read_sector(spi, sector_number):
     #Send command frame
     spi.writebytes(command_frame)
     #Wait for Data Ready Flag
-    time.sleep(1) #Wait for 1 second for testing
-    data_ready = False
-    while not data_ready:
-        data_ready = True #Set true for testing
+    data_ready_state = int(dataReadyPin.getValue())
+
+    #Wait for Data Ready Flag to go high
+    while data_ready_state == 0:
+        data_ready_state = int(dataReadyPin.getValue())
+
+    #Delay 0.1s
+    #time.sleep(0.1)
 
     #SPI read 517 bytes in 8 byte increments and append to data_frame
     #read 1 byte and throw it away
@@ -303,7 +299,7 @@ def convert_sample_to_dict(sample, number_of_values=16):
 
     return sample_dict
 
-def download_data_log(spi, number_of_samples, filename, first_data_sector=644, number_of_values=16):
+def download_data_log(spi, number_of_samples, filename, dataReadypin, first_data_sector=644, number_of_values=16):
     """
     Download samples via SPI and log each sample to a CSV file.
 
@@ -318,7 +314,7 @@ def download_data_log(spi, number_of_samples, filename, first_data_sector=644, n
     total_sectors = (number_of_samples + samples_per_sector - 1) // samples_per_sector
 
     # Determine progress update intervals
-    progress_interval = max(1, total_sectors // 10)  # At least 1 if total_sectors < 10
+    progress_interval = max(1, total_sectors // 100)  # At least 1 if total_sectors < 10
 
     # Get the CSV headers from the dictionary keys
     headers = [
@@ -346,7 +342,7 @@ def download_data_log(spi, number_of_samples, filename, first_data_sector=644, n
                 print(f"Progress: {progress_percentage:.0f}%")
 
             # Read the sector data via SPI
-            sector_data, CRC_good = read_sector(spi, sector_no + first_data_sector)
+            sector_data, CRC_good = read_sector(spi, sector_no + first_data_sector, dataReadypin)
 
             # Ensure data was correctly read
             if not CRC_good:
@@ -379,67 +375,21 @@ def main():
     spi.max_speed_hz = frequency
     spi.mode = 0b00
     
-    #Test Data Ready Pin
-    DATAREADY_FLAG = configureDataReadyPin()
-    testDataReadyPin(DATAREADY_FLAG) #Stuck here!
-
+    #Configure Data Ready Pin
+    dataReadyPin = configureDataReadyPin()
+    
     #Generate a file name based on the current time (.csv)
     filename = f"data_log_{time.strftime('%Y%m%d_%H%M%S')}.csv"
 
+    #Print off what we are doing
+    number_of_samples = 3600
+    print(f"Downloading {number_of_samples} samples to {filename}")
+
     #Download data log
-    download_data_log(spi, 6000, filename)
+    download_data_log(spi, number_of_samples, filename, dataReadyPin)
 
     print(f"Data log saved to {filename}")
 
-    # sector_no = 0
-    # print("Infinite send loop")
-    # while True:
-    #     #Send a test command
-    #     #quit(spi)
-    #     #write_sector(spi, sector_no)
-    #     #Read sector data
-    #     sector_data, CRC_good = read_sector(spi, sector_no)
-
-    #     #Print sector data
-    #     print_sector(sector_data)
-
-    #     #Print CRC match status
-    #     if CRC_good:
-    #         print("CRC Match")
-    #     else:
-    #         print("CRC Mismatch")
-
-    #     #Convert sector data into sample byte arrays
-    #     samples = sector_to_samples(sector_data, 16)
-
-    #     #Print sample arrays listing sector number and sample array number
-    #     for idx, sample in enumerate(samples):
-    #         print(f"Sample {idx + 1}: {sample.hex()}")
-
-    #     #Convert sample arrays into dictionaries
-    #     sample_dicts = [convert_sample_to_dict(sample, 16) for sample in samples]
-
-    #     #Print sample dictionaries
-    #     for idx, sample_dict in enumerate(sample_dicts):
-    #         print(f"Sample {idx + 1}: {sample_dict}")
-                
-    #     #If sector data was good increment sector number
-    #     if CRC_good:
-    #         sector_no += 1
-    #     else:
-    #         print("CRC Mismatch - Retrying")
-
-    #     #Wait for Enter to continue
-    #     input("Press Enter to continue...")
-      
-    #start_time = time.time()
-    #err = test_spi_send(spi, iterations)
-    #elapsed_time = time.time() - start_time
-    # 
-    # if err == 0:
-    #     print(f"All {format(iterations, ',')} bytes sent and received successfully in {format_time(elapsed_time)} - Transfer speed: {format_BPS(iterations, elapsed_time )}")   
-    # else:
-    #     print(f"Errors: {err}")
 
 if __name__ == "__main__":
     main()
