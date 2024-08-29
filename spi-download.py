@@ -182,6 +182,10 @@ def read_sector(spi, sector_number, dataReadyPin):
     #Assemble command frame
     command_frame = command_message + list(crc_bytes)
 
+    #Display hex values for command frame command_frame = <Byte 0: Command> <Byte 1 - Byte 5: Sector Number> <CRC-32>
+    #print("Command frame: ")
+    #printHex(command_frame)
+
     #Send command frame
     spi.writebytes(command_frame)
     #Wait for Data Ready Flag
@@ -213,20 +217,18 @@ def read_sector(spi, sector_number, dataReadyPin):
     #Calculate local CRC for sector data
     local_crc = crc32(sector_data)
     #Print local CRC as decimal
-    # print(f"Local CRC: {local_crc}")
+    #print(f"Local CRC: {local_crc}")
 
     #Print Local CRC as hex
-    # print("Local CRC: ")
-    # printHex(local_crc.to_bytes(4, byteorder='big'))
+    #print("Local CRC: ")
+    #printHex(local_crc.to_bytes(4, byteorder='big'))
     
     #Calculate remote CRC from data frame
     remote_crc_bytes = data_frame[-4:]
 
-    #extract last for bytes for remote CRC
-    remote_crc_bytes = data_frame[-4:]
     #Print Remote CRC bytes as hex
-    # print("Remote CRC: ")
-    # printHex(remote_crc_bytes)
+    #print("Remote CRC: ")
+    #printHex(remote_crc_bytes)
 
     #Convert remote CRC bytes to integer
     remote_crc = int.from_bytes(remote_crc_bytes, byteorder='big')
@@ -314,7 +316,7 @@ def download_data_log(spi, number_of_samples, filename, dataReadypin, first_data
     total_sectors = (number_of_samples + samples_per_sector - 1) // samples_per_sector
 
     # Determine progress update intervals
-    progress_interval = max(1, total_sectors // 100)  # At least 1 if total_sectors < 10
+    progress_interval = max(1, total_sectors // 99)  # At least 1 if total_sectors < 10
 
     # Get the CSV headers from the dictionary keys
     headers = [
@@ -345,9 +347,10 @@ def download_data_log(spi, number_of_samples, filename, dataReadypin, first_data
             sector_data, CRC_good = read_sector(spi, sector_no + first_data_sector, dataReadypin)
 
             # Ensure data was correctly read
-            if not CRC_good:
+            while not CRC_good:
                 print(f"CRC Mismatch on sector {sector_no}. Retrying...")
-                continue  # Optionally, you might want to retry reading the sector
+                sector_data, CRC_good = read_sector(spi, sector_no + first_data_sector, dataReadypin)
+                continue  
 
             # Convert sector data into sample byte arrays
             samples = sector_to_samples(sector_data, number_of_values)
@@ -369,7 +372,7 @@ def download_data_log(spi, number_of_samples, filename, dataReadypin, first_data
 
 def main():
     # Hardcoded arguments
-    frequency = 100000
+    frequency = 125000
 
     spi = spidev.SpiDev(0, 1)
     spi.max_speed_hz = frequency
