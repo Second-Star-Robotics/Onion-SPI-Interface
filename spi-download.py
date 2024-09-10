@@ -188,6 +188,10 @@ def read_sector(spi, sector_number, dataReadyPin):
 
     #Send command frame
     spi.writebytes(command_frame)
+
+    #Press any key to continue (to test timeout on PIC24 side)
+    input("Press Enter to continue...")
+
     #Wait for Data Ready Flag
     data_ready_state = int(dataReadyPin.getValue())
 
