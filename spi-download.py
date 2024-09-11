@@ -5,6 +5,9 @@ import spidev
 import csv
 import onionGpio
 
+#Global variables
+number_of_samples = 3600
+
 #Configure Data Ready Pin (GPIO5)
 def configureDataReadyPin():
     """
@@ -131,8 +134,8 @@ def quit(spi):
     command_frame = message + list(crc_bytes)
 
     #Display hex values for command frame command_frame = <Byte 0: Command> <Byte 1 - Byte 5: Sector Number> <CRC-32>
-    print("Command frame: ")
-    printHex(command_frame)    
+    #print("Command frame: ")
+    #printHex(command_frame)    
 
     #Send command frame
     spi.writebytes(command_frame)
@@ -189,18 +192,12 @@ def read_sector(spi, sector_number, dataReadyPin):
     #Send command frame
     spi.writebytes(command_frame)
 
-    #Press any key to continue (to test timeout on PIC24 side)
-    input("Press Enter to continue...")
-
-    #Wait for Data Ready Flag
+    #Wait for Data Ready Flag (should probably handle this with a timeout and resend command)
     data_ready_state = int(dataReadyPin.getValue())
 
     #Wait for Data Ready Flag to go high
     while data_ready_state == 0:
         data_ready_state = int(dataReadyPin.getValue())
-
-    #Delay 0.1s
-    #time.sleep(0.1)
 
     #SPI read 517 bytes in 8 byte increments and append to data_frame
     #read 1 byte and throw it away
@@ -372,6 +369,11 @@ def download_data_log(spi, number_of_samples, filename, dataReadypin, first_data
             if sample_count >= number_of_samples:
                 break
 
+        
+    #Send quit command to PIC24
+    print("Quitting SPI interface...")
+    quit(spi)
+
     print("Download and logging complete.")
 
 def main():
@@ -389,7 +391,6 @@ def main():
     filename = f"data_log_{time.strftime('%Y%m%d_%H%M%S')}.csv"
 
     #Print off what we are doing
-    number_of_samples = 3600
     print(f"Downloading {number_of_samples} samples to {filename}")
 
     #Download data log
